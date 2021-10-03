@@ -17,45 +17,12 @@
 namespace option {
 
     /*
-    * strを型Tのフォーマットに変換して返す
-    * 変換できないときは文字列をそのまま返す
-    * @param str : 変換対象の文字列
-    */
-    template <class T>
-    inline constexpr auto to_numeric(const std::string& str) {
-        if constexpr (std::is_same_v<T, char>) {
-            return str[0];
-        }
-        else if constexpr (std::is_same_v<T, int>) {
-            return std::stoi(str);
-        }
-        else if constexpr (std::is_same_v<T, long>) {
-            return std::stol(str);
-        }
-        else if constexpr (std::is_same_v<T, long long>) {
-            return std::stoll(str);
-        }
-        else if constexpr (std::is_same_v<T, unsigned long long>) {
-            return std::stoull(str);
-        }
-        else if constexpr (std::is_same_v<T, float>) {
-            return std::stof(str);
-        }
-        else if constexpr (std::is_same_v<T, double>) {
-            return std::stod(str);
-        }
-        else if constexpr (std::is_same_v<T, long double>) {
-            return std::stold(str);
-        }
-        else return str;
-    }
-    /*
     * 実装定義の型名name(typeid(T).name()で取得)から型名を取得
     * 型を取得できないときは文字列Unknownを返す
     * @param name : 型を取得する対象の文字列
     */
     template <class T>
-    inline constexpr  std::string type_name() {
+    inline std::string type_name() {
         const std::vector<std::pair<std::string, std::string>> table = {
             { typeid(std::string).name(), "std::string" },
             { typeid(int).name(), "int" },
@@ -73,6 +40,20 @@ namespace option {
             return itr->second;
         }
         else return "Unknwon";
+    }
+
+    /*
+    * strを型Tのフォーマットに変換して返す
+    * @param str : 変換対象の文字列
+    */
+    template <class T>
+    inline T transform(const std::string& str) {
+        std::istringstream stream(str);
+        T result;
+        stream >> result;
+        // 変換できなかった場合は例外を投げる
+        if (!(stream.eof() && bool(stream))) throw std::runtime_error(str + " は型 " + type_name<T>() + " に変換することはできません");
+        return result;
     }
 
     // optionのパターン
@@ -224,9 +205,9 @@ namespace option {
             T value = T();
             // 受け取った文字列を型Tに変換する
             try {
-                value = to_numeric<T>(value_s);
-            } catch (const std::logic_error& e) {
-                throw std::runtime_error("option " + this->full_option_name() + " に対する引数 " + value_s + " は型 " + type_name<T>() + " に変換することはできません");
+                value = transform<T>(value_s);
+            } catch (const std::runtime_error& e) {
+                throw std::runtime_error("option " + this->full_option_name() + " に対する引数 " + e.what());
             }
             this->add_value(value);
         }
