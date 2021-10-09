@@ -187,8 +187,9 @@ namespace option {
     * @param l : long option名
     */
     OptionWrapper OptionMap::luse(const std::string& l) const {
+        std::size_t i = l.find('=');
         // lの末尾に等号'='があれば等号で引数を受け取る対象のチェック
-        if (std::size_t i = l.find('='); i == l.length() - 1) {
+        if (i == l.length() - 1) {
             std::string ll = l.substr(0, i);
             for (auto& option : this->long_options_m) {
                 if ((option->name() == ll) && (check_pattern(option->useable_argument(), OPTION_ARG_PATTERN::EQUAL_SIGN))) {
@@ -210,8 +211,10 @@ namespace option {
     * @param l : option名
     */
     OptionWrapper OptionMap::use(const std::string& o) const {
+        std::size_t i = o.find('=');
+        std::size_t j = o.find(' ');
         // lの末尾に等号'='があれば等号で引数を受け取る対象のチェック
-        if (std::size_t i = o.find('='); i == o.length() - 1) {
+        if (i == o.length() - 1) {
             std::string oo = o.substr(0, i);
             for (auto& option : this->long_options_m) {
                 if ((option->name() == oo) && (check_pattern(option->useable_argument(), OPTION_ARG_PATTERN::EQUAL_SIGN))) {
@@ -220,8 +223,8 @@ namespace option {
             }
         }
         // lの末尾に空白スペース' 'があれば次の引数optionので引数を受け取る対象のチェック
-        else if (std::size_t i = o.find(' '); i == o.length() - 1) {
-            std::string oo = o.substr(0, i);
+        else if (j == o.length() - 1) {
+            std::string oo = o.substr(0, j);
             for (auto& option : this->long_options_m) {
                 if ((option->name() == oo) && (check_pattern(option->useable_argument(), OPTION_ARG_PATTERN::NEXT_ARG))) {
                     return OptionWrapper(option);
