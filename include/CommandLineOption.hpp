@@ -13,7 +13,7 @@
 #include <algorithm>
 #include <functional>
 #include <memory>
-
+#include <iostream>
 namespace option {
 
     /*
@@ -35,8 +35,8 @@ namespace option {
         };
         const std::string name = typeid(T).name();
 
-        if (auto itr = std::find_if(table.begin(), table.end(),
-            [&](const std::pair<std::string, std::string>& x) { return x.first == name; }); itr != table.end()) {
+        auto itr = std::find_if(table.begin(), table.end(), [&](const std::pair<std::string, std::string>& x) { return x.first == name; });
+        if (itr != table.end()) {
             return itr->second;
         }
         else return "Unknwon";
@@ -52,7 +52,8 @@ namespace option {
         T result;
         stream >> result;
         // 変換できなかった場合は例外を投げる
-        if (!(stream.eof() && bool(stream))) throw std::runtime_error(str + " は型 " + type_name<T>() + " に変換することはできません");
+        if (!(bool(stream) && (stream.eof() || stream.get() == std::char_traits<char>::eof())))
+            throw std::runtime_error(str + " は型 " + type_name<T>() + " に変換することはできません");
         return result;
     }
 
@@ -213,19 +214,21 @@ namespace option {
         }
         virtual OPTION_ARG_PATTERN useable_argument() const { return this->arg_pattern_m; }
 
-        template <class U>
+        template <class U, typename std::enable_if<!std::is_same<T, U>::value, std::nullptr_t>::type = nullptr>
         U as() const {
             if (this->value_m.size() == 0) {
                 throw std::runtime_error("option " + this->full_option_name() + " は引数をもっていません");
             }
-            if constexpr (std::is_same_v<T, U>) {
-                return this->value_m[0];
+            U result;
+            for (const T& e : this->value_m) result.push_back(e);
+            return result;
+        };
+        template <class U, typename std::enable_if<std::is_same<T, U>::value, std::nullptr_t>::type = nullptr>
+        U as() const {
+            if (this->value_m.size() == 0) {
+                throw std::runtime_error("option " + this->full_option_name() + " は引数をもっていません");
             }
-            else {
-                U result;
-                for (const T& e : this->value_m) result.push_back(e);
-                return result;
-            }
+            return this->value_m[0];
         };
 
         // 説明の取得
@@ -255,13 +258,22 @@ namespace option {
         return *this;
     }
 
+    namespace detail {
+        template <class... Types>
+        struct Void_t {
+            using type = void;
+        };
+        template <class... Types>
+        using void_t = typename Void_t<Types...>::type;
+    }
+
     // 型Tがvalue_typeをもつならその型に変換
     template <class T, class = void>
     struct to_value_type {
         using type = T;
     };
     template <class T>
-    struct to_value_type<T, std::void_t<typename T::value_type>> {
+    struct to_value_type<T, detail::void_t<typename T::value_type>> {
         using type = typename T::value_type;
     };
     // std::stringは例外
@@ -355,11 +367,13 @@ namespace option {
         template <class T>
         AddOptions& l(const std::string& name, const Value<T>& value, const std::string& desc) {
             OptionHasValue<T>* temp = nullptr;
-            if (std::size_t i = name.find('='); i == name.length() - 1) {
+            std::size_t i = name.find('=');
+            std::size_t j = name.find(' ');
+            if (i == name.length() - 1) {
                 temp = new OptionHasValue<T>(value, name.substr(0, i), desc, OPTION_PATTERN::LONG_OPTION, OPTION_ARG_PATTERN::EQUAL_SIGN);
             }
-            else if (std::size_t i = name.find(' '); i == name.length() - 1) {
-                temp = new OptionHasValue<T>(value, name.substr(0, i), desc, OPTION_PATTERN::LONG_OPTION, OPTION_ARG_PATTERN::NEXT_ARG);
+            else if (j == name.length() - 1) {
+                temp = new OptionHasValue<T>(value, name.substr(0, j), desc, OPTION_PATTERN::LONG_OPTION, OPTION_ARG_PATTERN::NEXT_ARG);
             }
             else {
                 temp = new OptionHasValue<T>(value, name, desc, OPTION_PATTERN::LONG_OPTION);
