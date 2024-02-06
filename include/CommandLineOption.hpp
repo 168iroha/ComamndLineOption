@@ -1,4 +1,4 @@
-/*
+﻿/*
  * コマンドライン引数の簡単な解析をする
  * この実装ではoptionと引数の連結を許容していない
  * ただし、long optionの等号での連結は許容している
@@ -55,6 +55,10 @@ namespace option {
         if (!(bool(stream) && (stream.eof() || stream.get() == std::char_traits<char>::eof())))
             throw std::runtime_error(str + " は型 " + type_name<T>() + " に変換することはできません");
         return result;
+    }
+    template <>
+    inline std::string transform<std::string>(const std::string& str) {
+        return str;
     }
 
     // optionのパターン
