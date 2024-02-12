@@ -429,6 +429,10 @@ namespace option {
 
         // optionの説明の取得
         std::string description() const;
+
+        /// @brief descriptionのoption部の列数
+        std::size_t optionCols = 25;
+        std::size_t lengthBetweenOptionAndDescription = 2;
     };
 }
 

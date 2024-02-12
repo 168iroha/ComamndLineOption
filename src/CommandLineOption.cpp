@@ -351,13 +351,12 @@ namespace option {
             auto p = e.lock();
             auto desc = p->description();
             oss << "  " << desc.first;
-            // 基本的にoptionは25文字で記述する
-            // 超過するときは2つ半角スペースを挟む
-            if (25 - 2 < desc.first.length()) {
-                oss << "  ";
+            // optionが長すぎるときは適当に保管する
+            if (this->optionCols - this->lengthBetweenOptionAndDescription < desc.first.length()) {
+                oss << std::string(this->lengthBetweenOptionAndDescription, ' ');
             }
             else {
-                oss << std::string(25 - desc.first.length(), ' ');
+                oss << std::string(this->optionCols - desc.first.length(), ' ');
             }
             oss << desc.second << std::endl;
         }
