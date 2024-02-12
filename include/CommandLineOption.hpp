@@ -14,6 +14,7 @@
 #include <functional>
 #include <memory>
 #include <iostream>
+
 namespace option {
 
     /*
@@ -109,6 +110,10 @@ namespace option {
 
         // 説明の取得
         virtual std::pair<std::string, std::string> description() const;
+
+        /// @brief オプションに設定可能な値の数の取得
+        /// @return 
+        virtual std::size_t limit() const { return 0; }
     };
 
     // 引数のオプション
@@ -119,7 +124,7 @@ namespace option {
         // 引数の制約条件
         std::function<bool(T)> constraint_m;
         // 引数の数の制限
-        int limit_m = 1;
+        std::size_t limit_m = 1;
         // 引数の表示名(helpで<name_m...[1-limit_m]>のように表示される)
         std::string name_m = "arg";
     public:
@@ -129,7 +134,7 @@ namespace option {
 
         template <class F>
         Value& constraint(F f);
-        Value& limit(int l) {
+        Value& limit(std::size_t l) {
             if (l == 0) throw std::logic_error("保持する引数の数は0に設定することはできません");
             if (l < this->default_value_m.size()) throw std::logic_error("デフォルト引数の数が引数の数の制限を超過しています");
             this->limit_m = l;
@@ -137,7 +142,7 @@ namespace option {
         }
         // 引数をいくらでも取ることが可能にする
         Value& unlimited() {
-            this->limit_m = -1;
+            this->limit_m = std::numeric_limits<std::size_t>::max();
             return *this;
         }
         Value& name(const std::string& n) {
@@ -148,7 +153,7 @@ namespace option {
         bool use_default_value() const { return !this->default_value_m.empty(); }
         const std::vector<T>& default_value() const { return this->default_value_m; }
         const std::function<bool(T)>& constraint() const { return this->constraint_m; }
-        int limit() const { return this->limit_m; }
+        std::size_t limit() const { return this->limit_m; }
         const std::string& name() const { return this->name_m; }
     };
 
@@ -187,6 +192,12 @@ namespace option {
             return new OptionHasValue(*this);
         }
 
+        /// @brief オプションに設定可能な値の数の取得
+        /// @return 
+        virtual std::size_t limit() const {
+            return this->value_info_m.limit();
+        }
+
         // 引数の追加
         void add_value(const T& value) {
             // 制約式が存在すればチェックする
@@ -198,7 +209,7 @@ namespace option {
             // 初めての引数の追加のときはクリアする
             if (!this->use()) this->value_m.clear();
             // 単純に引数の追加
-            if ((this->value_info_m.limit() < 0) || (this->value_m.size() < static_cast<std::size_t>(this->value_info_m.limit()))) this->value_m.push_back(value);
+            if (this->value_m.size() < static_cast<std::size_t>(this->value_info_m.limit())) this->value_m.push_back(value);
             // 一番最後の要素に対して上書きする
             else this->value_m[this->value_info_m.limit() - 1] = value;
             this->use(true);

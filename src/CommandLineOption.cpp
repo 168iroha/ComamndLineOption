@@ -9,24 +9,23 @@
 
 namespace option {
 
-    // strがoptionであるか
-    static bool is_option(const char* str) {
-        if (str == nullptr) return false;
-        return *str == '-' && *(str + 1) != '-' && *(str + 1) != '\0';
-    }
-    // strがlong optionであるか
-    static bool is_long_option(const char* str) {
-        if (str == nullptr) return false;
-        return *str == '-' && *(str + 1) == '-' && *(str + 2) != '-' && *(str + 2) != '\0';
-    }
+    namespace {
+        // strがoptionであるか
+        bool is_option(const char* str) {
+            if (str == nullptr) return false;
+            return *str == '-' && *(str + 1) != '-' && *(str + 1) != '\0';
+        }
+        // strがlong optionであるか
+        bool is_long_option(const char* str) {
+            if (str == nullptr) return false;
+            return *str == '-' && *(str + 1) == '-' && *(str + 2) != '-' && *(str + 2) != '\0';
+        }
 
-    // inputをdelimiterで分割する
-    static std::vector<std::string> split(const std::string& input, char delimiter) {
-        std::istringstream stream(input);
-        std::string field;
-        std::vector<std::string> result;
-        while (std::getline(stream, field, delimiter)) result.push_back(field);
-        return result;
+        // strが--であるか
+        bool is_double_dash(const char* str) {
+            if (str == nullptr) return false;
+            return *str == '-' && *(str + 1) == '-' && *(str + 2) == '\0';
+        }
     }
 
     // optionの引数パターンの取得
@@ -250,23 +249,46 @@ namespace option {
     OptionMap CommandLineOption::parse(int argc, const char *argv[]) {
         OptionMap result = this->map_m.clone();
         int p = 1;
-        while (p < argc) {
-            if (is_option(argv[p])) {
+        // 現在解析中のオプション
+        std::shared_ptr<Option> current = nullptr;
+        // 現在解析中のオプションが持っていた引数の数
+        std::size_t val_cnt = 0;
+
+        for (int p = 1; p < argc; ++p) {
+            if (current) {
+                if (!is_double_dash(argv[p]) && !is_option(argv[p]) && !is_long_option(argv[p])) {
+                    // 前回取得したオプションが引数を持つことができるときに取得を試みる
+                    current->add_value_s(argv[p]);
+                    ++val_cnt;
+                    if (current->limit() == val_cnt) {
+                        // 引数に設定可能な数となったら
+                        current = nullptr;
+                        val_cnt = 0;
+                    }
+                    continue;
+                }
+                else {
+                    if (val_cnt == 0) {
+                        throw std::runtime_error("option " + current->full_option_name() + " には引数を指定する必要があります");
+                    }
+                    current = nullptr;
+                    val_cnt = 0;
+                }
+            }
+
+            if (is_double_dash(argv[p])) {
+                continue;
+            }
+            else if (is_option(argv[p])) {
                 bool exist = false;
                 for (auto& option : result.options()) {
                     if (option->full_option_name() == argv[p]) {
                         // 次の要素を引数として利用するとき
                         if (check_pattern(option->useable_argument(), OPTION_ARG_PATTERN::NEXT_ARG)) {
-                            if (p + 1 >= argc || is_option(argv[p + 1]) || is_long_option(argv[p + 1])) {
-                                throw std::runtime_error("option " + option->full_option_name() + " には引数を指定する必要があります");
-                            }
-                            option->add_value_s(argv[p + 1]);
-                            p += 2;
+                            current = option;
+                            val_cnt = 0;
                         }
-                        else {
-                            option->use(true);
-                            ++p;
-                        }
+                        option->use(true);
                         exist = true;
                         break;
                     }
@@ -284,37 +306,31 @@ namespace option {
                     // long optionでは等号の記述を許容するため等号で区切る
                     if (option->full_option_name() == value_s.substr(0, i)) {
                         // argv[p]内で等号により引数が指定されているとき
-                        if ((i != std::string::npos) && check_pattern(option->useable_argument(), OPTION_ARG_PATTERN::EQUAL_SIGN)) {
-                            // 等号が最後の位置であるときは例外を投げる
-                            if (i == value_s.length() - 1) {
-                                throw std::runtime_error("=の後には引数を明示的に指定する必要があります");
+                        if (i != std::string::npos) {
+                            if (check_pattern(option->useable_argument(), OPTION_ARG_PATTERN::EQUAL_SIGN)) {
+                                current = option;
+                                val_cnt = 1;
+                                // 等号が最後の位置であるときは例外を投げる
+                                if (i == value_s.length() - 1) {
+                                    throw std::runtime_error("=の後には引数を明示的に指定する必要があります");
+                                }
+                                // optionに対する引数の追加
+                                option->add_value_s(value_s.substr(i + 1));
                             }
-                            // カンマ区切りで複数の引数を得る
-                            std::vector<std::string> values_s = split(value_s.substr(i + 1), ',');
-                            for (const auto& e : values_s) {
-                                option->add_value_s(e);
+                            else {
+                                throw std::runtime_error("option " + current->full_option_name() + " は=による値の指定はできません");
                             }
-                            ++p;
-                            exist = true;
-                            break;
                         }
                         // 次の要素を引数として利用するとき
                         else if (i == std::string::npos) {
                             if (check_pattern(option->useable_argument(), OPTION_ARG_PATTERN::NEXT_ARG)) {
-                                if (p + 1 >= argc || is_option(argv[p + 1]) || is_long_option(argv[p + 1])) {
-                                    throw std::runtime_error("option " + option->full_option_name() + " には引数を指定する必要があります");
-                                }
-                                option->add_value_s(argv[p + 1]);
-                                p += 2;
+                                current = option;
+                                val_cnt = 0;
                             }
-                            // 引数を利用しないとき
-                            else if (check_pattern(option->useable_argument(), OPTION_ARG_PATTERN::NONE)) {
-                                option->use(true);
-                                ++p;
-                            }
-                            exist = true;
-                            break;
                         }
+                        option->use(true);
+                        exist = true;
+                        break;
                     }
                 }
                 if (!exist) {
@@ -323,7 +339,6 @@ namespace option {
             }
             else {
                 result.none_options().push_back(argv[p]);
-                ++p;
             }
         }
         return result;
