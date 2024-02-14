@@ -111,6 +111,11 @@ namespace option {
         bool use() const noexcept { return this->_use; }
 
         /// <summary>
+        /// コマンドライン解析前の状態へ初期化
+        /// </summary>
+        virtual void init() {}
+
+        /// <summary>
         /// 引数がハイフンのみで構成されるかの判定
         /// </summary>
         /// <param name="str">判定対象の文字列</param>
@@ -589,6 +594,13 @@ namespace option {
         virtual std::string name_description() const {
             return this->full_name() + this->arg_pattern_description() + this->option_value_description();
         }
+
+        /// <summary>
+        /// コマンドライン解析前の状態へ初期化
+        /// </summary>
+        virtual void init() {
+            this->_value.clear();
+        }
     };
 
     /// <summary>
@@ -692,6 +704,13 @@ namespace option {
         /// <returns></returns>
         virtual std::string name_description() const {
             return this->full_name() + this->arg_pattern_description() + this->option_value_description();
+        }
+
+        /// <summary>
+        /// コマンドライン解析前の状態へ初期化
+        /// </summary>
+        virtual void init() {
+            this->_value.clear();
         }
     };
 
@@ -823,16 +842,17 @@ namespace option {
         /// 名前なしoptionの取得
         /// </summary>
         /// <returns></returns>
-        const std::vector<std::string>& none_options() {
+        const std::vector<std::string>& none_options() const {
             return this->_none_options;
         }
 
         /// <summary>
         /// コマンドライン引数を解析する
         /// </summary>
-        /// <param name="argc"></param>
-        /// <param name="argv"></param>
-        void parse(int argc, const char* argv[]) {
+        /// <param name="argc">コマンドライン引数の数</param>
+        /// <param name="argv">コマンドライン引数を示す配列</param>
+        /// <returns>解析後のオフセット</returns>
+        int parse(int argc, const char* argv[]) {
             int offset = 1;
             while (offset < argc) {
                 if (Option::is_option(argv[offset])) {
@@ -877,6 +897,7 @@ namespace option {
                     ++offset;
                 }
             }
+            return offset;
         }
 
         /// <summary>
@@ -964,6 +985,15 @@ namespace option {
             }
             if (this->_ordered_options.empty()) oss << "  None" << std::endl;
             return oss.str();
+        }
+
+        /// <summary>
+        /// コマンドライン解析前の状態へ初期化
+        /// </summary>
+        void init() {
+            for (const auto& e : this->_ordered_options) {
+                e.lock()->init();
+            }
         }
     };
 
@@ -1065,11 +1095,9 @@ namespace option {
         /// </summary>
         /// <param name="argc">コマンドライン引数の数</param>
         /// <param name="argv">コマンドライン引数を示す配列</param>
-        /// <returns>解析結果が格納されているオブジェクト</returns>
-        OptionMap parse(int argc, const char* argv[]) {
-            OptionMap result = this->_map.clone();
-            result.parse(argc, argv);
-            return result;
+        /// <returns>解析後のオフセット</returns>
+        int parse(int argc, const char* argv[]) {
+            return this->_map.parse(argc, argv);
         }
 
         /// <summary>

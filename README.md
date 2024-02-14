@@ -19,9 +19,9 @@ int main(int argc, const char* argv[]) {
         // --k=<int>...というカンマ区切りでいくらでも0より大きい引数を受け取ることができるlong option
         .l("k", option::Value<int>().unlimited().constraint([](int i) { return 0 < i; }).name("param-k"), "何かしらのパラメータk");
 
-    option::OptionMap map;
+    const option::OptionMap& map = clo.map();
     try {
-        map = clo.parse(argc, const_cast<const char**>(argv));
+        clo.parse(argc, const_cast<const char**>(argv));
     }
     // optionの入力エラーを表示
     catch (std::runtime_error& e) {
