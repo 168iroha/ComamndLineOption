@@ -11,30 +11,20 @@
 namespace option {
 
     /// <summary>
-    /// 型名を示す文字列の取得
+    /// 型名を示す文字列を取得するためのメタ関数
     /// </summary>
-    /// <typeparam name="T"></typeparam>
-    /// <returns></returns>
-    template <class T>
-    inline std::string type_name() {
-        const std::vector<std::pair<std::string, std::string>> table = {
-            { typeid(std::string).name(), "std::string" },
-            { typeid(int).name(), "int" },
-            { typeid(long).name(), "long" },
-            { typeid(long long).name(), "long long" },
-            { typeid(unsigned long long).name(), "unsigned long long" },
-            { typeid(float).name(), "float" },
-            { typeid(double).name(), "double" },
-            { typeid(long double).name(), "long double" },
-        };
-        const std::string name = typeid(T).name();
-
-        auto itr = std::find_if(table.begin(), table.end(), [&](const std::pair<std::string, std::string>& x) { return x.first == name; });
-        if (itr != table.end()) {
-            return itr->second;
-        }
-        else return "Unknwon";
-    }
+    template <class T> class type_name { static constexpr std::string_view value = "Unknwon"; };
+#define DECLARE_TYPE_NAME(name)\
+    template <> class type_name<name> { static constexpr std::string_view value = #name; };
+    DECLARE_TYPE_NAME(std::string)
+    DECLARE_TYPE_NAME(int)
+    DECLARE_TYPE_NAME(long)
+    DECLARE_TYPE_NAME(long long)
+    DECLARE_TYPE_NAME(unsigned long long)
+    DECLARE_TYPE_NAME(float)
+    DECLARE_TYPE_NAME(double)
+    DECLARE_TYPE_NAME(long double)
+#undef DECLARE_TYPE_NAME
 
     /// <summary>
     /// optionおよびlong optionの基底
@@ -88,7 +78,7 @@ namespace option {
         virtual int parse(int offset, int argc, const char* argv[]) = 0;
 
         /// <summary>
-        /// オプションの定義の際に用いる接頭辞の取得(NULL終端)
+        /// オプションの定義の際に用いる接頭辞の取得
         /// </summary>
         /// <returns>オプションの定義の際に用いる接頭辞</returns>
         virtual std::string_view prefix() const = 0;
@@ -103,7 +93,10 @@ namespace option {
         /// 接頭辞付きのオプション名の取得
         /// </summary>
         /// <returns>接頭辞付きのオプション名</returns>
-        std::string full_name() const { return this->prefix().data() + this->name(); }
+        std::string full_name() const {
+            auto prefix = this->prefix();
+            return std::string(prefix.data(), prefix.size()) + this->name();
+        }
 
         /// <summary>
         /// オプションの説明の取得
@@ -231,7 +224,7 @@ namespace option {
         }
 
         /// <summary>
-        /// オプションの定義の際に用いる接頭辞の取得(NULL終端)
+        /// オプションの定義の際に用いる接頭辞の取得
         /// </summary>
         /// <returns>オプションの定義の際に用いる接頭辞</returns>
         virtual std::string_view prefix() const { return Option::PREFIX; }
@@ -283,7 +276,7 @@ namespace option {
         }
 
         /// <summary>
-        /// オプションの定義の際に用いる接頭辞の取得(NULL終端)
+        /// オプションの定義の際に用いる接頭辞の取得
         /// </summary>
         /// <returns>オプションの定義の際に用いる接頭辞</returns>
         virtual std::string_view prefix() const { return LongOption::PREFIX; }
@@ -419,7 +412,7 @@ namespace option {
                 stream >> result;
                 // 変換できなかった場合は例外を投げる
                 if (!(bool(stream) && (stream.eof() || stream.get() == std::char_traits<char>::eof()))) {
-                    throw std::runtime_error(std::format("{0} は型 {1} に変換することはできません", str, type_name<T>()));
+                    throw std::runtime_error(std::format("{0} は型 {1} に変換することはできません", str, type_name<T>::value));
                 }
 
                 if (this->_constraint && !this->_constraint(result)) {
@@ -734,7 +727,7 @@ namespace option {
             using value_type = typename to_value_type<T>::type;
             OptionValue<value_type>* p = dynamic_cast<OptionValue<value_type>*>(this->_option.get());
             if (p == nullptr) {
-                throw std::logic_error(std::format("option {0} から型 {1} な引数を受け取ることはできません", this->_option->full_name(), type_name<value_type>()));
+                throw std::logic_error(std::format("option {0} から型 {1} な引数を受け取ることはできません", this->_option->full_name(), type_name<value_type>::value));
             }
             try {
                 return p->template as<T>();
@@ -820,7 +813,7 @@ namespace option {
                     result._ordered_options.emplace_back(result._long_options.back());
                 }
                 else {
-                    throw std::logic_error("option " + p->name() + "は未知のoptionパターンです");
+                    throw std::logic_error(std::format("option {0}は未知のoptionパターンです", p->name()));
                 }
             }
             result._none_options = this->_none_options;
