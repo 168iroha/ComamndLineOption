@@ -478,7 +478,7 @@ namespace option {
         }
 
     public:
-        OptionValue(const Value<T> value_info) : _value_info(value_info) {}
+        OptionValue(const Value<T>& value_info) : _value_info(value_info) {}
 
         /// <summary>
         /// 保持している値の取得
@@ -756,7 +756,9 @@ namespace option {
         }
     };
 
-    // コマンドラインオプションのためのデータ
+    /// <summary>
+    /// コマンドラインオプションのためのデータ
+    /// </summary>
     class OptionMap {
         std::vector<std::shared_ptr<OptionBase>> _options;
         std::vector<std::shared_ptr<OptionBase>> _long_options;
@@ -1002,72 +1004,101 @@ namespace option {
     /// </summary>
     class AddOptions {
         OptionMap& _option_map;
+
+        /// <summary>
+        /// optionの構築のためのクラス
+        /// </summary>
+        class OptionBuilder {
+            AddOptions& _ao;
+        public:
+            OptionBuilder() = delete;
+            OptionBuilder(AddOptions& ao) : _ao(ao) {}
+
+            /// <summary>
+            /// optionの生成
+            /// </summary>
+            /// <param name="name">option名</param>
+            /// <param name="desc">optionの説明</param>
+            /// <returns></returns>
+            AddOptions& operator()(const std::string& name, const std::string& desc) {
+                this->_ao._option_map.add_option(new Option(name, desc));
+                return this->_ao;
+            }
+
+            /// <summary>
+            /// 引数付きのoptionの生成
+            /// </summary>
+            /// <typeparam name="T">引数の型</typeparam>
+            /// <param name="name">option名</param>
+            /// <param name="value">引数の情報</param>
+            /// <param name="desc">optionの説明</param>
+            /// <returns></returns>
+            template <class T>
+            AddOptions& operator()(const std::string& name, const Value<T>& value, const std::string& desc) {
+                this->_ao._option_map.add_option(new OptionHasValue<T>(value, name, desc));
+                return this->_ao;
+            }
+        };
+
+        /// <summary>
+        /// long optionの構築のためのクラス
+        /// </summary>
+        class LongOptionBuilder {
+            AddOptions& _ao;
+        public:
+            LongOptionBuilder() = delete;
+            LongOptionBuilder(AddOptions& ao) : _ao(ao) {}
+
+            /// <summary>
+            /// long optionの生成
+            /// </summary>
+            /// <typeparam name="T">引数の型</typeparam>
+            /// <param name="name">long option名</param>
+            /// <param name="desc">long optionの説明</param>
+            /// <returns></returns>
+            AddOptions& operator()(const std::string& name, const std::string& desc) {
+                this->_ao._option_map.add_long_option(new LongOption(name, desc));
+                return this->_ao;
+            }
+
+            /// <summary>
+            /// 引数付きlong optionの生成
+            /// </summary>
+            /// <typeparam name="T">引数の型</typeparam>
+            /// <param name="name">long option名</param>
+            /// <param name="value">引数の情報</param>
+            /// <param name="desc">long optionの説明</param>
+            /// <returns></returns>
+            template <class T>
+            AddOptions& operator()(const std::string& name, const Value<T>& value, const std::string& desc) {
+                LongOptionHasValue<T>* temp = nullptr;
+                std::size_t i = name.find('=');
+                std::size_t j = name.find(' ');
+                if (i == name.length() - 1) {
+                    temp = new LongOptionHasValue<T>(value, name.substr(0, i), desc, OptionHasValueBase::ARG_PATTERN::ASSIGN);
+                }
+                else if (j == name.length() - 1) {
+                    temp = new LongOptionHasValue<T>(value, name.substr(0, j), desc, OptionHasValueBase::ARG_PATTERN::SPACE);
+                }
+                else {
+                    temp = new LongOptionHasValue<T>(value, name, desc, OptionHasValueBase::ARG_PATTERN::ASSIGN | OptionHasValueBase::ARG_PATTERN::SPACE);
+                }
+
+                this->_ao._option_map.add_long_option(temp);
+                return this->_ao;
+            }
+        };
     public:
-        AddOptions(OptionMap& option_map) : _option_map(option_map) {}
+        AddOptions(OptionMap& option_map) : _option_map(option_map), o(*this), l(*this) {}
 
         /// <summary>
-        /// long optionの生成
+        /// optionの構築のためのクラス
         /// </summary>
-        /// <typeparam name="T">引数の型</typeparam>
-        /// <param name="name">long option名</param>
-        /// <param name="desc">long optionの説明</param>
-        /// <returns></returns>
-        AddOptions& l(const std::string& name, const std::string& desc) {
-            this->_option_map.add_long_option(new LongOption(name, desc));
-            return *this;
-        }
-        
+        OptionBuilder o;
         /// <summary>
-        /// 引数付きlong optionの生成
+        /// long optionの構築のためのオブジェクト
         /// </summary>
-        /// <typeparam name="T">引数の型</typeparam>
-        /// <param name="name">long option名</param>
-        /// <param name="value">引数の情報</param>
-        /// <param name="desc">long optionの説明</param>
-        /// <returns></returns>
-        template <class T>
-        AddOptions& l(const std::string& name, const Value<T>& value, const std::string& desc) {
-            LongOptionHasValue<T>* temp = nullptr;
-            std::size_t i = name.find('=');
-            std::size_t j = name.find(' ');
-            if (i == name.length() - 1) {
-                temp = new LongOptionHasValue<T>(value, name.substr(0, i), desc, OptionHasValueBase::ARG_PATTERN::ASSIGN);
-            }
-            else if (j == name.length() - 1) {
-                temp = new LongOptionHasValue<T>(value, name.substr(0, j), desc, OptionHasValueBase::ARG_PATTERN::SPACE);
-            }
-            else {
-                temp = new LongOptionHasValue<T>(value, name, desc, OptionHasValueBase::ARG_PATTERN::ASSIGN | OptionHasValueBase::ARG_PATTERN::SPACE);
-            }
-
-            this->_option_map.add_long_option(temp);
-            return *this;
-        }
-        
-        /// <summary>
-        /// optionの生成
-        /// </summary>
-        /// <param name="name">option名</param>
-        /// <param name="desc">optionの説明</param>
-        /// <returns></returns>
-        AddOptions& o(const std::string& name, const std::string& desc) {
-            this->_option_map.add_option(new Option(name, desc));
-            return *this;
-        }
-
-        /// <summary>
-        /// 引数付きのoptionの生成
-        /// </summary>
-        /// <typeparam name="T">引数の型</typeparam>
-        /// <param name="name">option名</param>
-        /// <param name="value">引数の情報</param>
-        /// <param name="desc">optionの説明</param>
-        /// <returns></returns>
-        template <class T>
-        AddOptions& o(const std::string& name, const Value<T>& value, const std::string& desc) {
-            this->_option_map.add_option(new OptionHasValue<T>(value, name, desc));
-            return *this;
-        }
+        LongOptionBuilder l;
     };
 
     /// <summary>
