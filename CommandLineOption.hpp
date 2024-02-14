@@ -13,9 +13,9 @@ namespace option {
     /// <summary>
     /// 型名を示す文字列を取得するためのメタ関数
     /// </summary>
-    template <class T> class type_name { static constexpr std::string_view value = "Unknwon"; };
+    template <class T> struct type_name { static constexpr std::string_view value = "Unknwon"; };
 #define DECLARE_TYPE_NAME(name)\
-    template <> class type_name<name> { static constexpr std::string_view value = #name; };
+    template <> struct type_name<name> { static constexpr std::string_view value = #name; };
     DECLARE_TYPE_NAME(std::string)
     DECLARE_TYPE_NAME(int)
     DECLARE_TYPE_NAME(long)
@@ -27,7 +27,7 @@ namespace option {
 #undef DECLARE_TYPE_NAME
 
     /// <summary>
-    /// optionおよびlong optionの基底
+    /// optionなどの基底
     /// </summary>
     class OptionBase {
     protected:
@@ -47,9 +47,6 @@ namespace option {
     public:
         OptionBase() = delete;
         OptionBase(const std::string& name, const std::string& description): _name(name), _description(description) {
-            if (name.length() == 0) {
-                throw std::invalid_argument("空のoption名は定義することはできません");
-            }
             if (name[0] == '-') {
                 throw std::invalid_argument("option名の1文字目は'-'にすることはできません");
             }
@@ -78,12 +75,6 @@ namespace option {
         virtual int parse(int offset, int argc, const char* argv[]) = 0;
 
         /// <summary>
-        /// オプションの定義の際に用いる接頭辞の取得
-        /// </summary>
-        /// <returns>オプションの定義の際に用いる接頭辞</returns>
-        virtual std::string_view prefix() const = 0;
-
-        /// <summary>
         /// オプション名の取得
         /// </summary>
         /// <returns>オプション名</returns>
@@ -93,10 +84,13 @@ namespace option {
         /// 接頭辞付きのオプション名の取得
         /// </summary>
         /// <returns>接頭辞付きのオプション名</returns>
-        std::string full_name() const {
-            auto prefix = this->prefix();
-            return std::string(prefix.data(), prefix.size()) + this->name();
-        }
+        virtual std::string full_name() const { return this->name(); }
+
+        /// <summary>
+        /// メモリの確保なしにオプション名がマッチするかの判定
+        /// </summary>
+        /// <returns>接頭辞付きのオプション名</returns>
+        virtual bool match_name(std::string_view str) const { return this->_name == str; }
 
         /// <summary>
         /// オプションの説明の取得
@@ -193,11 +187,6 @@ namespace option {
     /// option
     /// </summary>
     class Option : public OptionBase {
-    protected:
-        /// <summary>
-        /// option利用時の接頭辞(-aのように宣言)
-        /// </summary>
-        static constexpr std::string_view PREFIX = "-";
     public:
         using OptionBase::OptionBase;
         virtual ~Option() {}
@@ -216,7 +205,7 @@ namespace option {
         /// <param name="argv">コマンドライン引数を示す配列</param>
         /// <returns>解析後のオフセット</returns>
         virtual int parse(int offset, int argc, const char* argv[]) {
-            if (this->full_name() == argv[offset]) {
+            if (this->match_name(argv[offset])) {
                 this->_use = true;
                 return offset + 1;
             }
@@ -224,10 +213,18 @@ namespace option {
         }
 
         /// <summary>
-        /// オプションの定義の際に用いる接頭辞の取得
+        /// 接頭辞付きのオプション名の取得
         /// </summary>
-        /// <returns>オプションの定義の際に用いる接頭辞</returns>
-        virtual std::string_view prefix() const { return Option::PREFIX; }
+        /// <returns>接頭辞付きのオプション名</returns>
+        virtual std::string full_name() const { return "-" + this->name(); }
+
+        /// <summary>
+        /// メモリの確保なしにオプション名がマッチするかの判定
+        /// </summary>
+        /// <returns>接頭辞付きのオプション名</returns>
+        virtual bool match_name(std::string_view str) const {
+            return str.size() >= 2 && str[0] == '-' && this->_name == str.substr(1);
+        }
 
         /// <summary>
         /// optionであることの判定
@@ -244,12 +241,6 @@ namespace option {
     /// long option
     /// </summary>
     class LongOption : public OptionBase {
-    protected:
-        /// <summary>
-        /// option利用時の接頭辞(-aのように宣言)
-        /// </summary>
-        static constexpr std::string_view PREFIX = "--";
-
     public:
         using OptionBase::OptionBase;
         virtual ~LongOption() {}
@@ -268,7 +259,7 @@ namespace option {
         /// <param name="argv">コマンドライン引数を示す配列</param>
         /// <returns>解析後のオフセット</returns>
         virtual int parse(int offset, int argc, const char* argv[]) {
-            if (this->full_name() == argv[offset]) {
+            if (this->match_name(argv[offset])) {
                 this->_use = true;
                 return offset + 1;
             }
@@ -276,10 +267,18 @@ namespace option {
         }
 
         /// <summary>
-        /// オプションの定義の際に用いる接頭辞の取得
+        /// 接頭辞付きのオプション名の取得
         /// </summary>
-        /// <returns>オプションの定義の際に用いる接頭辞</returns>
-        virtual std::string_view prefix() const { return LongOption::PREFIX; }
+        /// <returns>接頭辞付きのオプション名</returns>
+        virtual std::string full_name() const { return "--" + this->name(); }
+
+        /// <summary>
+        /// メモリの確保なしにオプション名がマッチするかの判定
+        /// </summary>
+        /// <returns>接頭辞付きのオプション名</returns>
+        virtual bool match_name(std::string_view str) const {
+            return str.size() >= 3 && str[0] == '-' && str[1] == '-' && this->_name == str.substr(2);
+        }
 
         /// <summary>
         /// long optionであることの判定
@@ -539,7 +538,7 @@ namespace option {
         /// <param name="argv">コマンドライン引数を示す配列</param>
         /// <returns>解析後のオフセット</returns>
         virtual int parse(int offset, int argc, const char* argv[]) {
-            if (this->full_name() == argv[offset]) {
+            if (this->match_name(argv[offset])) {
                 int offset2 = offset + 1;
                 
                 std::size_t i = this->_value.size();
@@ -620,7 +619,7 @@ namespace option {
         virtual int parse(int offset, int argc, const char* argv[]) {
             const auto str = std::string_view{ argv[offset] };
             std::size_t i = str.find('=');
-            if (this->full_name() == str.substr(0, i)) {
+            if (this->match_name(str.substr(0, i))) {
                 std::size_t limit = this->_value_info.limit();
                 if (i != std::string::npos) {
                     if ((this->_arg_pattern & ARG_PATTERN::ASSIGN) != ARG_PATTERN::ASSIGN) {
