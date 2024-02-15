@@ -71,8 +71,8 @@ namespace option {
         /// <param name="offset">コマンドライン引数のオフセット</param>
         /// <param name="argc">コマンドライン引数の数</param>
         /// <param name="argv">コマンドライン引数を示す配列</param>
-        /// <returns>解析後のオフセット</returns>
-        virtual int parse(int offset, int argc, const char* argv[]) = 0;
+        /// <returns>解析を実行したときにtrue</returns>
+        virtual bool parse(int& offset, int& argc, const char* argv[]) = 0;
 
         /// <summary>
         /// オプション名の取得
@@ -208,13 +208,14 @@ namespace option {
         /// <param name="offset">コマンドライン引数のオフセット</param>
         /// <param name="argc">コマンドライン引数の数</param>
         /// <param name="argv">コマンドライン引数を示す配列</param>
-        /// <returns>解析後のオフセット</returns>
-        virtual int parse(int offset, int argc, const char* argv[]) {
+        /// <returns>解析を実行したときにtrue</returns>
+        virtual bool parse(int& offset, int& argc, const char* argv[]) {
             if (this->match_name(argv[offset])) {
                 this->_use = true;
-                return offset + 1;
+                ++offset;
+                return true;
             }
-            return offset;
+            return false;
         }
 
         /// <summary>
@@ -262,13 +263,14 @@ namespace option {
         /// <param name="offset">コマンドライン引数のオフセット</param>
         /// <param name="argc">コマンドライン引数の数</param>
         /// <param name="argv">コマンドライン引数を示す配列</param>
-        /// <returns>解析後のオフセット</returns>
-        virtual int parse(int offset, int argc, const char* argv[]) {
+        /// <returns>解析を実行したときにtrue</returns>
+        virtual bool parse(int& offset, int& argc, const char* argv[]) {
             if (this->match_name(argv[offset])) {
                 this->_use = true;
-                return offset + 1;
+                ++offset;
+                return true;
             }
-            return offset;
+            return false;
         }
 
         /// <summary>
@@ -541,8 +543,8 @@ namespace option {
         /// <param name="offset">コマンドライン引数のオフセット</param>
         /// <param name="argc">コマンドライン引数の数</param>
         /// <param name="argv">コマンドライン引数を示す配列</param>
-        /// <returns>解析後のオフセット</returns>
-        virtual int parse(int offset, int argc, const char* argv[]) {
+        /// <returns>解析を実行したときにtrue</returns>
+        virtual bool parse(int& offset, int& argc, const char* argv[]) {
             if (this->match_name(argv[offset])) {
                 int offset2 = offset + 1;
                 
@@ -582,9 +584,10 @@ namespace option {
                     throw std::runtime_error(std::format("option {0} には引数を指定する必要があります", this->full_name()));
                 }
                 this->_use = true;
-                return offset2;
+                offset = offset2;
+                return true;
             }
-            return offset;
+            return false;
         }
 
         /// <summary>
@@ -627,18 +630,23 @@ namespace option {
         /// <param name="offset">コマンドライン引数のオフセット</param>
         /// <param name="argc">コマンドライン引数の数</param>
         /// <param name="argv">コマンドライン引数を示す配列</param>
-        /// <returns>解析後のオフセット</returns>
-        virtual int parse(int offset, int argc, const char* argv[]) {
+        /// <returns>解析を実行したときにtrue</returns>
+        virtual bool parse(int& offset, int& argc, const char* argv[]) {
             const auto str = std::string_view{ argv[offset] };
             std::size_t i = str.find('=');
             if (this->match_name(str.substr(0, i))) {
+                int offset2 = offset + 1;
                 std::size_t limit = this->_value_info.limit();
+
                 if (i != std::string::npos) {
                     if ((this->_arg_pattern & ARG_PATTERN::ASSIGN) != ARG_PATTERN::ASSIGN) {
                         // 解析は不可のためスルー
-                        return offset;
+                        return false;
                     }
                     else {
+                        // long optionは指定が出現毎に内容をクリアする
+                        this->_value.clear();
+
                         // 「=」による指定では1つのみ指定可能
                         limit = 1;
                         try {
@@ -653,16 +661,14 @@ namespace option {
                 else {
                     if ((this->_arg_pattern & ARG_PATTERN::SPACE) != ARG_PATTERN::SPACE) {
                         // 解析は不可のためスルー
-                        return offset;
+                        return false;
                     }
+                    // long optionは指定が出現毎に内容をクリアする
+                    this->_value.clear();
                 }
 
-                int offset2 = offset + 1;
-                // long optionは指定が出現毎に内容をクリアする
-                this->_value.clear();
-
-                std::size_t i = this->_value.size();
-                for (; i < limit && offset2 < argc; ++i, ++offset2) {
+                std::size_t j = this->_value.size();
+                for (; j < limit && offset2 < argc; ++j, ++offset2) {
                     const char* token = argv[offset2];
                     if (Option::is_option(token) || LongOption::is_long_option(token)) {
                         // 次のトークンがoptionかlong optionの時は中断
@@ -689,13 +695,14 @@ namespace option {
                 }
 
                 // 本来なら必須項目として判定をするべきだが今はこれで妥協
-                if (i == 0 && limit > 0) {
+                if (j == 0 && limit > 0) {
                     throw std::runtime_error(std::format("option {0} には引数を指定する必要があります", this->full_name()));
                 }
                 this->_use = true;
-                return offset2;
+                offset = offset2;
+                return true;
             }
-            return offset;
+            return false;
         }
 
         /// <summary>
@@ -711,6 +718,62 @@ namespace option {
         /// </summary>
         virtual void init() {
             this->_value.clear();
+        }
+    };
+
+    /// <summary>
+    /// 名前なしオプション
+    /// </summary>
+    template <class T>
+    class UnnamedOption : public OptionBase, public OptionValue<T> {
+        friend class AddOptions;
+        /// <summary>
+        /// trueなら後続の解析を中断する
+        /// </summary>
+        bool _pause = false;
+
+    public:
+        UnnamedOption(const Value<T>& value_info, const std::string& description) : OptionValue<T>(value_info), OptionBase("", description) {}
+
+        /// <summary>
+        /// クローンを作成する
+        /// </summary>
+        /// <returns>クローン</returns>
+        virtual OptionBase* clone() const { return new UnnamedOption(*this); }
+
+        /// <summary>
+        /// コマンドライン引数のオプションを解析する
+        /// </summary>
+        /// <param name="offset">コマンドライン引数のオフセット</param>
+        /// <param name="argc">コマンドライン引数の数</param>
+        /// <param name="argv">コマンドライン引数を示す配列</param>
+        /// <returns>解析を実行したときにtrue</returns>
+        virtual bool parse(int& offset, int& argc, const char* argv[]) {
+            if (this->_value.size() < this->_value_info.limit()) {
+                try {
+                    // 引数に追加
+                    this->_value.push_back(this->_value_info.transform(argv[offset]));
+                }
+                catch (const std::runtime_error& e) {
+                    throw std::runtime_error(std::format("option {0} に対する引数 {1}", this->full_name(), e.what()));
+                }
+                ++offset;
+                this->_use = true;
+                if (this->_value.size() == this->_value_info.limit() && this->_pause) {
+                    // 中断をする場合はその旨を設定する
+                    argc = offset;
+                }
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// オプション名についての説明
+        /// </summary>
+        /// <returns></returns>
+        virtual std::string name_description() const {
+            return this->option_value_description();
         }
     };
 
@@ -762,14 +825,11 @@ namespace option {
     class OptionMap {
         std::vector<std::shared_ptr<OptionBase>> _options;
         std::vector<std::shared_ptr<OptionBase>> _long_options;
+        std::shared_ptr<OptionBase> _unnamed_options;
         /// <summary>
         /// OptionBaseで宣言されるoption
         /// </summary>
         std::vector<std::weak_ptr<OptionBase>> _ordered_options;
-        /// <summary>
-        /// optionとして解析されなかった引数
-        /// </summary>
-        std::vector<std::string> _none_options;
 
         /// <summary>
         /// useの実装部
@@ -836,7 +896,10 @@ namespace option {
                     throw std::logic_error(std::format("option {0}は未知のoptionパターンです", p->name()));
                 }
             }
-            result._none_options = this->_none_options;
+            if (this->_unnamed_options) {
+                result._unnamed_options.reset(this->_unnamed_options->clone());
+                result._ordered_options.emplace_back(result._unnamed_options);
+            }
             return result;
         }
 
@@ -844,8 +907,8 @@ namespace option {
         /// 名前なしoptionの取得
         /// </summary>
         /// <returns></returns>
-        const std::vector<std::string>& none_options() const {
-            return this->_none_options;
+        OptionWrapper unnamed_options() const {
+            return OptionWrapper(this->_unnamed_options);
         }
 
         /// <summary>
@@ -860,10 +923,8 @@ namespace option {
                 if (Option::is_option(argv[offset])) {
                     bool exist = false;
                     for (auto& ptr : this->_options) {
-                        int ret = ptr->parse(offset, argc, argv);
-                        if (ret != offset) {
+                        if (ptr->parse(offset, argc, argv)) {
                             // 解析に成功したときは次の解析に移る
-                            offset = ret;
                             exist = true;
                             break;
                         }
@@ -875,10 +936,8 @@ namespace option {
                 else if (LongOption::is_long_option(argv[offset])) {
                     bool exist = false;
                     for (auto& ptr : this->_long_options) {
-                        int ret = ptr->parse(offset, argc, argv);
-                        if (ret != offset) {
+                        if (ptr->parse(offset, argc, argv)) {
                             // 解析に成功したときは次の解析に移る
-                            offset = ret;
                             exist = true;
                             break;
                         }
@@ -895,8 +954,14 @@ namespace option {
                             continue;
                         }
                     }
-                    this->_none_options.push_back(argv[offset]);
-                    ++offset;
+                    if (this->_unnamed_options) {
+                        if (!this->_unnamed_options->parse(offset, argc, argv)) {
+                            throw std::runtime_error(std::format("これ以上の名前なしオプション {0} は設定不可です", argv[offset]));
+                        }
+                    }
+                    else {
+                        throw std::runtime_error("名前なしオプションの設定はできません");
+                    }
                 }
             }
             return offset;
@@ -931,7 +996,7 @@ namespace option {
         /// <summary>
         /// optionもしくはlong optionを利用しているかのチェック
         /// </summary>
-        /// <param name="o"></param>
+        /// <param name="o">オプション名</param>
         /// <returns></returns>
         OptionWrapper use(const std::string& o) const {
             auto p1 = this->use_impl(o, this->_options);
@@ -961,6 +1026,19 @@ namespace option {
         void add_long_option(LongOption* option) {
             this->_long_options.emplace_back(option);
             this->_ordered_options.emplace_back(this->_long_options.back());
+        }
+
+        /// <summary>
+        /// 名前なしのオプションの追加
+        /// </summary>
+        /// <param name="option">追加するoption</param>
+        template <class T>
+        void add_unnamed_option(UnnamedOption<T>* option) {
+            if (this->_unnamed_options) {
+                throw std::invalid_argument("複数の名前なしオプションは定義できません");
+            }
+            this->_unnamed_options.reset(option);
+            this->_ordered_options.emplace_back(this->_unnamed_options);
         }
 
         /// <summary>
@@ -1088,8 +1166,54 @@ namespace option {
                 return this->_ao;
             }
         };
+        /// <summary>
+        /// 名前なしオプションの構築のためのクラス
+        /// </summary>
+        class UnnamedOptionBuilder {
+            AddOptions& _ao;
+            /// <summary>
+            /// trueなら後続の解析を中断する
+            /// </summary>
+            bool _pause = false;
+
+            /// <summary>
+            /// UnnamedOptionBuilderの設定値を初期化する
+            /// </summary>
+            void init() {
+                this->_pause = false;
+            }
+
+        public:
+            UnnamedOptionBuilder() = delete;
+            UnnamedOptionBuilder(AddOptions& ao) : _ao(ao) {}
+
+            /// <summary>
+            /// 後続の解析を中断することの宣言
+            /// </summary>
+            /// <returns></returns>
+            UnnamedOptionBuilder& pause() {
+                this->_pause = true;
+                return *this;
+            }
+
+            /// <summary>
+            /// 名前なしオプションの生成
+            /// </summary>
+            /// <typeparam name="T">引数の型</typeparam>
+            /// <param name="value">引数の情報</param>
+            /// <param name="desc">名前なしオプションの説明</param>
+            /// <returns></returns>
+            template <class T>
+            AddOptions& operator()(const Value<T>& value, const std::string& desc) {
+                UnnamedOption<T>* temp = new UnnamedOption<T>(value, desc);
+                temp->_pause = this->_pause;
+                this->_ao._option_map.add_unnamed_option(temp);
+                this->init();
+                return this->_ao;
+            }
+        };
     public:
-        AddOptions(OptionMap& option_map) : _option_map(option_map), o(*this), l(*this) {}
+        AddOptions(OptionMap& option_map) : _option_map(option_map), o(*this), l(*this), u(*this) {}
 
         /// <summary>
         /// optionの構築のためのクラス
@@ -1099,6 +1223,10 @@ namespace option {
         /// long optionの構築のためのオブジェクト
         /// </summary>
         LongOptionBuilder l;
+        /// <summary>
+        /// 名前なしオプションの構築のためのオブジェクト
+        /// </summary>
+        UnnamedOptionBuilder u;
     };
 
     /// <summary>
