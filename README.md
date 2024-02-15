@@ -17,7 +17,9 @@ int main(int argc, const char* argv[]) {
         // -o <std::string>というoption(デフォルト引数は"out.txt")
         .o("o", option::Value<std::string>("out.txt").name("out"), "出力ファイル名")
         // --k=<int>...というカンマ区切りでいくらでも0より大きい引数を受け取ることができるlong option
-        .l("k", option::Value<int>().unlimited().constraint([](int i) { return 0 < i; }).name("param-k"), "何かしらのパラメータk");
+        .l("k", option::Value<int>().unlimited().constraint([](int i) { return 0 < i; }).name("param-k"), "何かしらのパラメータk")
+        // 実行するコマンドを受け取る名前なしオプション
+        .u.pause()(option::Value<std::string>().name("command"), "実行するコマンド。詳細はヘルプを参照");
 
     const option::OptionMap& map = clo.map();
     try {
@@ -52,10 +54,12 @@ int main(int argc, const char* argv[]) {
             std::cout << k << std::endl;
     }
 
-    // optionではない引数のチェック
-    std::cout << "none option:" << std::endl;
-    for (auto none_option : map.none_options())
-        std::cout << none_option << std::endl;
+    // 名前なしオプションのチェック
+    std::cout << "unnamed option:" << std::endl;
+    if (auto unnamed_options = map.unnamed_options(); unnamed_options) {
+        for (const auto& unnamed_option : unnamed_options.as<std::vector<std::string>>())
+            std::cout << unnamed_option << std::endl;
+    }
 
 
     // 出力ファイル名
