@@ -61,7 +61,6 @@ int main(int argc, const char* argv[]) {
             std::cout << unnamed_option << std::endl;
     }
 
-
     // 出力ファイル名
     std::cout << "出力ファイル名:" << map.use("o").as<std::string>() << std::endl;
 
@@ -83,6 +82,7 @@ Options:
   --version                バージョン情報
   -o <out>(=out.txt)       出力ファイル名
   --k[ |=]<param-k...>     何かしらのパラメータk
+  <command>                実行するコマンド。詳細はヘルプを参照
 ```
 
 ## 各種入力値の取得
