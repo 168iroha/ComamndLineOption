@@ -19,13 +19,19 @@ int main(int argc, const char* argv[]) {
         // --k=<int>...というカンマ区切りでいくらでも0より大きい引数を受け取ることができるlong option
         .l("k", option::Value<int>().unlimited().constraint([](int i) { return 0 < i; }).name("param-k"), "何かしらのパラメータk")
         // 実行するコマンドを受け取る名前なしオプション
-        .u.pause()(option::Value<std::string>().name("command"), "実行するコマンド。詳細はヘルプを参照");
+        .u(option::Value<std::string>().name("command"), "実行するコマンド。詳細はヘルプを参照");
+
+    // 引数がないとき説明を表示
+    if (argc == 1) {
+        std::cout << "Options:" << std::endl;
+        std::cout << clo.description() << std::endl;
+        return 0;
+    }
 
     const option::OptionMap& map = clo.map();
     try {
-        clo.parse(argc, const_cast<const char**>(argv));
+        clo.parse(argc - 1, &argv[1]);
     }
-    // optionの入力エラーを表示
     catch (std::runtime_error& e) {
         std::cerr << "error: " << e.what() << std::endl;
         return 1;
@@ -36,7 +42,7 @@ int main(int argc, const char* argv[]) {
         std::cout << "[" << str << "]についてのヘルプ" << std::endl;
         return 0;
     }
-    // 引数がないときやヘルプの指定をされたら表示
+    // ヘルプの指定をされたら説明を表示
     else if (map.use("help") || argc == 1) {
         std::cout << "Options:" << std::endl;
         std::cout << clo.description() << std::endl;

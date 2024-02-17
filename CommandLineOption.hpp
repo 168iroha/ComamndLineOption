@@ -116,6 +116,11 @@ namespace option {
         virtual void init() {}
 
         /// <summary>
+        /// 与えられた引数のチェック
+        /// </summary>
+        virtual void validate() {}
+
+        /// <summary>
         /// 引数がハイフンのみで構成されるかの判定
         /// </summary>
         /// <param name="str">判定対象の文字列</param>
@@ -304,6 +309,8 @@ namespace option {
     /// <typeparam name="T">引数の型</typeparam>
     template <class T>
     class Value {
+        template <class U> friend class OptionValue;
+
         /// <summary>
         /// デフォルト引数
         /// </summary>
@@ -320,6 +327,10 @@ namespace option {
         /// 引数の表示名(helpで<_name...[1-_limit]>のように表示される)
         /// </summary>
         std::string _name = "arg";
+        /// <summary>
+        /// 必須項目となる件数
+        /// </summary>
+        std::size_t _required = 0;
 
     public:
         Value() {}
@@ -376,34 +387,20 @@ namespace option {
         }
 
         /// <summary>
+        /// 必須項目として設定する
+        /// </summary>
+        /// <param name="n">必須項目となる件数</param>
+        /// <returns></returns>
+        Value& required(std::size_t n = std::numeric_limits<std::size_t>::max()) {
+            this->_required = n;
+            return *this;
+        }
+
+        /// <summary>
         /// デフォルト引数を持つかの判定
         /// </summary>
         /// <returns>デフォルト引数を持つ場合にtrue</returns>
         bool has_default() const { return !this->_default_value.empty(); }
-
-        /// <summary>
-        /// デフォルト引数の取得
-        /// </summary>
-        /// <returns>デフォルト引数</returns>
-        const std::vector<T>& default_value() const { return this->_default_value; }
-
-        /// <summary>
-        /// 制約式の取得
-        /// </summary>
-        /// <returns>制約式</returns>
-        const std::function<bool(T)>& constraint() const { return this->_constraint; }
-
-        /// <summary>
-        /// 引数の数の上限の取得
-        /// </summary>
-        /// <returns>引数の数の上限</returns>
-        std::size_t limit() const { return this->_limit; }
-
-        /// <summary>
-        /// 引数の表示名の取得
-        /// </summary>
-        /// <returns>引数の表示名</returns>
-        const std::string& name() const { return this->_name; }
 
         /// <summary>
         /// 文字列をValueとして利用可能な型に変換する
@@ -421,15 +418,9 @@ namespace option {
                     throw std::runtime_error(std::format("{0} は型 {1} に変換することはできません", str, type_name<T>::value));
                 }
 
-                if (this->_constraint && !this->_constraint(result)) {
-                    throw std::runtime_error(std::format("{0} は制約条件を満たしていません", str));
-                }
                 return result;
             }
             else {
-                if (this->_constraint && !this->_constraint(str)) {
-                    throw std::runtime_error(std::format("{0} は制約条件を満たしていません", str));
-                }
                 return str;
             }
         }
@@ -440,7 +431,6 @@ namespace option {
     /// </summary>
     template <class T>
     class OptionValue {
-    protected:
         /// <summary>
         /// 引数の設定
         /// </summary>
@@ -450,6 +440,7 @@ namespace option {
         /// </summary>
         std::vector<T> _value;
 
+    protected:
         /// <summary>
         /// option引数に関する説明の取得
         /// </summary>
@@ -457,8 +448,8 @@ namespace option {
         std::string option_value_description() const {
             // 引数の形式の取得
             std::string arg = "<";
-            arg += this->_value_info.name();
-            std::size_t limit = this->_value_info.limit();
+            arg += this->_value_info._name;
+            std::size_t limit = this->_value_info._limit;
             if (limit == std::numeric_limits<std::size_t>::max()) {
                 arg += "...";
             }
@@ -469,7 +460,7 @@ namespace option {
             if (this->_value_info.has_default()) {
                 // デフォルト引数をカンマつなぎにする
                 std::stringstream stream;
-                auto& default_value = this->_value_info.default_value();
+                auto& default_value = this->_value_info._default_value;
                 stream << default_value[0];
                 for (std::size_t i = 1; i < default_value.size(); ++i) {
                     stream << "," << default_value[i];
@@ -477,6 +468,69 @@ namespace option {
                 arg += "(=" + stream.str() + ")";
             }
             return arg;
+        }
+
+        /// <summary>
+        /// 引数の追加
+        /// </summary>
+        /// <param name="val">引数を示す文字列</param>
+        void append(std::string_view val) {
+            this->_value.push_back(this->_value_info.transform(val));
+        }
+
+        /// <summary>
+        /// 引数の検査
+        /// </summary>
+        void validateArg() {
+            // チェック対象の引数
+            const auto& targets = this->_value.size() != 0 ? this->_value : this->_value_info._default_value;
+
+            // 引数の数のチェック
+            if (targets.size() > this->_value_info._limit) {
+                throw std::runtime_error("引数の数が多すぎます");
+            }
+            if (this->_value_info._limit == std::numeric_limits<std::size_t>::max() && this->_value_info._required == std::numeric_limits<std::size_t>::max()) {
+                // 任意の数の引数を取ることができる場合かつデフォルトの必須の場合は1つのみ必須とする
+                if (this->_value_info._default_value.size() == 0 && targets.size() == 0) {
+                    throw std::runtime_error("引数の数が少なすぎます");
+                }
+            }
+            else {
+                std::size_t required = std::min(this->_value_info._limit, this->_value_info._required);
+                if (targets.size() < required) {
+                    throw std::runtime_error("引数の数が少なすぎます");
+                }
+            }
+
+            // 引数の制約条件のチェック
+            if (this->_value_info._constraint) {
+                for (const auto& target : targets) {
+                    if (!this->_value_info._constraint(target)) {
+                        throw std::runtime_error(std::format("{0} は制約条件を満たしていません", target));
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 設定された引数のクリア
+        /// </summary>
+        void clearArg() {
+            this->_value.clear();
+        }
+
+        /// <summary>
+        /// 引数の数の取得
+        /// </summary>
+        std::size_t argNum() {
+            return this->_value.size();
+        }
+
+        /// <summary>
+        /// 引数の数の上限の取得
+        /// </summary>
+        std::size_t argLimit() {
+            return this->_value_info._limit;
         }
 
     public:
@@ -493,7 +547,7 @@ namespace option {
             if (this->_value.size() == 0) {
                 // デフォルト引数の検査
                 if (this->_value_info.has_default()) {
-                    return this->_value_info.default_value();
+                    return this->_value_info._default_value;
                 }
                 throw std::runtime_error("引数が設定されていません");
             }
@@ -511,7 +565,7 @@ namespace option {
             if (this->_value.size() == 0) {
                 // デフォルト引数の検査
                 if (this->_value_info.has_default()) {
-                    return this->_value_info.default_value()[0];
+                    return this->_value_info._default_value[0];
                 }
                 throw std::runtime_error("引数が設定されていません");
             }
@@ -548,9 +602,9 @@ namespace option {
             if (this->match_name(argv[offset])) {
                 int offset2 = offset + 1;
                 
-                std::size_t i = this->_value.size();
-                std::size_t limit = std::min(i + 1, this->_value_info.limit());
-                if (limit > 0 && i == limit) {
+                std::size_t i = this->argNum();
+                std::size_t limit = std::min(i + 1, this->argLimit());
+                if (limit > 0 && this->argNum() == limit) {
                     throw std::runtime_error(std::format("option {0} でこれ以上の引数を指定することはできません", this->full_name()));
                 }
 
@@ -572,15 +626,14 @@ namespace option {
                     }
                     try {
                         // 引数に追加
-                        this->_value.push_back(this->_value_info.transform(token));
+                        this->append(token);
                     }
                     catch (const std::runtime_error& e) {
                         throw std::runtime_error(std::format("option {0} に対する引数 {1}", this->full_name(), e.what()));
                     }
                 }
 
-                // 本来なら必須項目として判定をするべきだが今はこれで妥協
-                if (i == this->_value.size() && limit > 0) {
+                if (i == this->argNum() && limit > 0) {
                     throw std::runtime_error(std::format("option {0} には引数を指定する必要があります", this->full_name()));
                 }
                 this->_use = true;
@@ -602,7 +655,14 @@ namespace option {
         /// コマンドライン解析前の状態へ初期化
         /// </summary>
         virtual void init() {
-            this->_value.clear();
+            this->clearArg();
+        }
+
+        /// <summary>
+        /// 与えられた引数のチェック
+        /// </summary>
+        virtual void validate() {
+            this->validateArg();
         }
     };
 
@@ -636,7 +696,7 @@ namespace option {
             std::size_t i = str.find('=');
             if (this->match_name(str.substr(0, i))) {
                 int offset2 = offset + 1;
-                std::size_t limit = this->_value_info.limit();
+                std::size_t limit = this->argLimit();
 
                 if (i != std::string::npos) {
                     if ((this->_arg_pattern & ARG_PATTERN::ASSIGN) != ARG_PATTERN::ASSIGN) {
@@ -644,18 +704,21 @@ namespace option {
                         return false;
                     }
                     else {
-                        // long optionは指定が出現毎に内容をクリアする
-                        this->_value.clear();
-
                         // 「=」による指定では1つのみ指定可能
-                        limit = 1;
+                        if (limit > 0 && this->argNum() == limit) {
+                            throw std::runtime_error(std::format("option {0} でこれ以上の引数を指定することはできません", this->full_name()));
+                        }
                         try {
                             // 引数に追加
-                            this->_value.push_back(this->_value_info.transform(str.substr(i + 1)));
+                            this->append(str.substr(i + 1));
                         }
                         catch (const std::runtime_error& e) {
                             throw std::runtime_error(std::format("option {0} に対する引数 {1}", this->full_name(), e.what()));
                         }
+
+                        this->_use = true;
+                        offset = offset2;
+                        return true;
                     }
                 }
                 else {
@@ -663,11 +726,13 @@ namespace option {
                         // 解析は不可のためスルー
                         return false;
                     }
-                    // long optionは指定が出現毎に内容をクリアする
-                    this->_value.clear();
                 }
 
-                std::size_t j = this->_value.size();
+                std::size_t j = this->argNum();
+                if (limit > 0 && j == limit) {
+                    throw std::runtime_error(std::format("option {0} でこれ以上の引数を指定することはできません", this->full_name()));
+                }
+
                 for (; j < limit && offset2 < argc; ++j, ++offset2) {
                     const char* token = argv[offset2];
                     if (Option::is_option(token) || LongOption::is_long_option(token)) {
@@ -684,17 +749,15 @@ namespace option {
                             break;
                         }
                     }
-
                     try {
                         // 引数に追加
-                        this->_value.push_back(this->_value_info.transform(token));
+                        this->append(token);
                     }
                     catch (const std::runtime_error& e) {
                         throw std::runtime_error(std::format("option {0} に対する引数 {1}", this->full_name(), e.what()));
                     }
                 }
 
-                // 本来なら必須項目として判定をするべきだが今はこれで妥協
                 if (j == 0 && limit > 0) {
                     throw std::runtime_error(std::format("option {0} には引数を指定する必要があります", this->full_name()));
                 }
@@ -717,7 +780,14 @@ namespace option {
         /// コマンドライン解析前の状態へ初期化
         /// </summary>
         virtual void init() {
-            this->_value.clear();
+            this->clearArg();
+        }
+
+        /// <summary>
+        /// 与えられた引数のチェック
+        /// </summary>
+        virtual void validate() {
+            this->validateArg();
         }
     };
 
@@ -749,17 +819,17 @@ namespace option {
         /// <param name="argv">コマンドライン引数を示す配列</param>
         /// <returns>解析を実行したときにtrue</returns>
         virtual bool parse(int& offset, int& argc, const char* argv[]) {
-            if (this->_value.size() < this->_value_info.limit()) {
+            if (this->argNum() < this->argLimit()) {
                 try {
                     // 引数に追加
-                    this->_value.push_back(this->_value_info.transform(argv[offset]));
+                    this->append(argv[offset]);
                 }
                 catch (const std::runtime_error& e) {
                     throw std::runtime_error(std::format("option {0} に対する引数 {1}", this->full_name(), e.what()));
                 }
                 ++offset;
                 this->_use = true;
-                if (this->_value.size() == this->_value_info.limit() && this->_pause) {
+                if (this->argNum() == this->argLimit() && this->_pause) {
                     // 中断をする場合はその旨を設定する
                     argc = offset;
                 }
@@ -774,6 +844,20 @@ namespace option {
         /// <returns></returns>
         virtual std::string name_description() const {
             return this->option_value_description();
+        }
+
+        /// <summary>
+        /// コマンドライン解析前の状態へ初期化
+        /// </summary>
+        virtual void init() {
+            this->clearArg();
+        }
+
+        /// <summary>
+        /// 与えられた引数のチェック
+        /// </summary>
+        virtual void validate() {
+            this->validateArg();
         }
     };
 
@@ -918,7 +1002,7 @@ namespace option {
         /// <param name="argv">コマンドライン引数を示す配列</param>
         /// <returns>解析後のオフセット</returns>
         int parse(int argc, const char* argv[]) {
-            int offset = 1;
+            int offset = 0;
             while (offset < argc) {
                 if (Option::is_option(argv[offset])) {
                     bool exist = false;
@@ -962,6 +1046,25 @@ namespace option {
                     else {
                         throw std::runtime_error("名前なしオプションの設定はできません");
                     }
+                }
+            }
+
+            // 引数の正当性確認
+            for (const auto& e : this->_ordered_options) {
+                auto p = e.lock();
+                try {
+                    p->validate();
+                }
+                catch (const std::runtime_error& e) {
+                    throw std::runtime_error(std::format("option {0} に対する{1}", p->full_name(), e.what()));
+                }
+            }
+            if (this->_unnamed_options) {
+                try {
+                    this->_unnamed_options->validate();
+                }
+                catch (const std::runtime_error& e) {
+                    throw std::runtime_error(std::format("名前なしオプションに対する引数 {0}", e.what()));
                 }
             }
             return offset;
