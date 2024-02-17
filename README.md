@@ -19,7 +19,7 @@ int main(int argc, const char* argv[]) {
         // --k=<int>...というカンマ区切りでいくらでも0より大きい引数を受け取ることができるlong option
         .l("k", option::Value<int>().unlimited().constraint([](int i) { return 0 < i; }).name("param-k"), "何かしらのパラメータk")
         // 実行するコマンドを受け取る名前なしオプション
-        .u(option::Value<std::string>().name("command"), "実行するコマンド。詳細はヘルプを参照");
+        .u(option::Value<std::string>().unlimited().name("command"), "実行するコマンド。詳細はヘルプを参照");
 
     // 引数がないとき説明を表示
     if (argc == 1) {
