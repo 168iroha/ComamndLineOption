@@ -46,7 +46,7 @@ namespace option {
 
     public:
         OptionBase() = delete;
-        OptionBase(const std::string& name, const std::string& description): _name(name), _description(description) {
+        OptionBase(const std::string& name, const std::string& description) : _name(name), _description(description) {
             if (name[0] == '-') {
                 throw std::invalid_argument("option名の1文字目は'-'にすることはできません");
             }
@@ -184,7 +184,7 @@ namespace option {
         }
 
     public:
-        OptionHasValueBase(std::size_t arg_pattern): _arg_pattern(arg_pattern) {}
+        OptionHasValueBase(std::size_t arg_pattern) : _arg_pattern(arg_pattern) {}
 
         /// <summary>
         /// 引数の入力パターン
@@ -601,7 +601,7 @@ namespace option {
         virtual bool parse(int& offset, int& argc, const char* argv[]) {
             if (this->match_name(argv[offset])) {
                 int offset2 = offset + 1;
-                
+
                 std::size_t i = this->argNum();
                 std::size_t limit = std::min(i + 1, this->argLimit());
                 if (limit > 0 && this->argNum() == limit) {
@@ -1000,8 +1000,9 @@ namespace option {
         /// </summary>
         /// <param name="argc">コマンドライン引数の数</param>
         /// <param name="argv">コマンドライン引数を示す配列</param>
+        /// <param name="validate">引数のチェックを行うか</param>
         /// <returns>解析後のオフセット</returns>
-        int parse(int argc, const char* argv[]) {
+        int parse(int argc, const char* argv[], bool validate = true) {
             int offset = 0;
             while (offset < argc) {
                 if (Option::is_option(argv[offset])) {
@@ -1049,6 +1050,17 @@ namespace option {
                 }
             }
 
+            if (validate) {
+                this->validate();
+            }
+
+            return offset;
+        }
+
+        /// <summary>
+        /// 与えられた引数のチェック
+        /// </summary>
+        void validate() {
             // 引数の正当性確認
             for (const auto& e : this->_ordered_options) {
                 auto p = e.lock();
@@ -1067,7 +1079,6 @@ namespace option {
                     throw std::runtime_error(std::format("名前なしオプションに対する引数 {0}", e.what()));
                 }
             }
-            return offset;
         }
 
         /// <summary>
@@ -1357,9 +1368,10 @@ namespace option {
         /// </summary>
         /// <param name="argc">コマンドライン引数の数</param>
         /// <param name="argv">コマンドライン引数を示す配列</param>
+        /// <param name="validate">引数のチェックを行うか</param>
         /// <returns>解析後のオフセット</returns>
-        int parse(int argc, const char* argv[]) {
-            return this->_map.parse(argc, argv);
+        int parse(int argc, const char* argv[], bool validate = true) {
+            return this->_map.parse(argc, argv, validate);
         }
 
         /// <summary>
