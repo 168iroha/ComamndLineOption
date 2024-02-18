@@ -1060,7 +1060,7 @@ namespace option {
         /// <summary>
         /// 与えられた引数のチェック
         /// </summary>
-        void validate() {
+        void validate() const {
             // 引数の正当性確認
             for (const auto& e : this->_ordered_options) {
                 auto p = e.lock();
