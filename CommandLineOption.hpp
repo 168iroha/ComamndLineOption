@@ -132,7 +132,7 @@ namespace option {
                     return false;
                 }
             }
-            return true;
+            return *str != '\0';
         }
     };
 
