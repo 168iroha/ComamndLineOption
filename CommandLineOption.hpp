@@ -181,6 +181,7 @@ namespace option {
                     return "[ |=]";
                 }
             }
+            throw std::logic_error("ここに来ることはない");
         }
 
     public:
