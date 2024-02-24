@@ -862,26 +862,26 @@ namespace option {
         }
     };
 
-    // 型Tがvalue_typeをもつならその型に変換
-    template <class T, class = void>
-    struct to_value_type {
-        using type = T;
-    };
-    template <class T>
-    struct to_value_type<T, std::void_t<typename T::value_type>> {
-        using type = typename T::value_type;
-    };
-    // std::stringは例外
-    template <>
-    struct to_value_type<std::string> {
-        using type = std::string;
-    };
-
     /// <summary>
     /// コマンドラインオプションの解析結果を取得するためのクラス
     /// </summary>
     class OptionWrapper {
         std::shared_ptr<OptionBase> _option;
+
+        // 型Tがvalue_typeをもつならその型に変換
+        template <class T, class = void>
+        struct to_value_type {
+            using type = T;
+        };
+        template <class T>
+        struct to_value_type<T, std::void_t<typename T::value_type>> {
+            using type = typename T::value_type;
+        };
+        // std::stringは例外
+        template <>
+        struct to_value_type<std::string> {
+            using type = std::string;
+        };
     public:
         OptionWrapper(const std::shared_ptr<OptionBase>& option) : _option(option) {}
 
